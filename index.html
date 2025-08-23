@@ -3,241 +3,161 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Audito - Media Player</title>
+<title>Audito - Music Player</title>
 <style>
-:root {--bg:#2e2e2e;--frame:#2b2b2b;--text:#fff;--button:#444;--button-hover:#666;--footer:#aaa;}
-body.light {--bg:#f4f4f4;--frame:#fff;--text:#000;--button:#ddd;--button-hover:#bbb;--footer:#555;}
-body {font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:var(--bg);color:var(--text);transition:0.3s;}
-.player-frame {border:2px solid #666;border-radius:12px;padding:20px;max-width:500px;width:95%;background:var(--frame);box-shadow:0 8px 20px rgba(0,0,0,0.6);text-align:center;transition:0.3s;}
-h2{margin-top:0;}
-select,input[type=file]{width:100%;padding:6px;margin:10px 0;border-radius:6px;border:none;font-size:14px;background:var(--button);color:var(--text);}
-.controls{margin-top:12px;display:flex;flex-wrap:wrap;justify-content:center;}
-button{background:var(--button);border:none;border-radius:6px;padding:8px 10px;margin:4px;cursor:pointer;color:var(--text);font-size:14px;transition:transform 0.15s, background 0.2s;}
-button:hover{background:var(--button-hover);transform:scale(1.05);}
-.slider{width:100%;margin:8px 0;}
-footer{font-size:12px;margin-top:15px;color:var(--footer);}
-canvas{width:100%;height:150px;border-radius:6px;display:block;margin:10px 0;background:var(--frame);}
-#currentTrackDisplay{margin:8px 0;padding:6px 10px;border-radius:6px;background:var(--button);color:var(--text);font-weight:bold;text-align:center;}
-#currentTrackDisplay.playing{animation:pulse 1s infinite;}
-@keyframes pulse{0%{transform:scale(1);box-shadow:0 0 5px rgba(255,255,255,0.3);}50%{transform:scale(1.05);box-shadow:0 0 15px rgba(255,255,255,0.6);}100%{transform:scale(1);box-shadow:0 0 5px rgba(255,255,255,0.3);}}
-.eqSlider.vertical{-webkit-appearance: slider-vertical;writing-mode: bt-lr;width:15px;height:120px;margin:0 2px;background:var(--button);transition:box-shadow 0.1s;}
-.eqSlider.vertical::-webkit-slider-thumb{-webkit-appearance:none;background:var(--button-hover);width:15px;height:10px;border-radius:4px;cursor:pointer;}
-.eqSlider.vertical::-moz-range-thumb{background:var(--button-hover);width:15px;height:10px;border-radius:4px;cursor:pointer;}
-#mobileControlBar{display:flex;justify-content:space-around;align-items:center;margin-top:10px;}
-#mobileControlBar button{flex:1;margin:2px;padding:12px;font-size:16px;}
-#autoNextToggle{margin-top:5px;padding:6px;border-radius:6px;background:var(--button);color:var(--text);cursor:pointer;}
-@media (max-width:600px){
-  .player-frame{padding:15px;}
-  video{width:100%;height:auto;max-height:250px;}
-  .controls button{padding:6px 8px;margin:3px;font-size:12px;}
-  .eqSlider.vertical{height:80px;width:12px;}
-  #mobileControlBar button{font-size:14px;padding:10px;}
-}
+body { background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: Arial, sans-serif; }
+.app-frame { width: 420px; max-height: 95vh; background: #222; border-radius: 20px; box-shadow: 8px 8px 16px #111, -8px -8px 16px #333; padding: 15px; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+.controls, .eq, .playlist, .debug-log, .volume-control { width: 100%; margin-top: 10px; }
+.controls button, .eq button { background: #2a2a2a; border: none; padding: 10px; margin: 5px; border-radius: 12px; color: #fff; cursor: pointer; box-shadow: inset 3px 3px 6px #111, inset -3px -3px 6px #333; }
+.eq { display: flex; justify-content: space-around; align-items: flex-end; height: 150px; }
+.eq input[type=range] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 20px; height: 120px; }
+.volume-control { display: flex; align-items: center; justify-content: center; }
+.volume-control input[type=range] { width: 80%; }
+canvas { width: 100%; height: 100px; background: black; border-radius: 10px; margin-top: 10px; }
+.playlist { flex: 1; overflow-y: auto; background: #111; border-radius: 10px; padding: 10px; color: white; }
+.playlist div { padding: 5px; cursor: pointer; }
+.playlist div:hover { background: #333; }
+.debug-log { background: #000; color: #fff; font-size: 12px; height: 80px; overflow-y: auto; border-radius: 8px; padding: 5px; }
 </style>
 </head>
 <body>
-<div class="player-frame">
-<h2>🎵 Audito</h2>
-<button id="darkToggle">🌙 Dark Mode</button>
-<input type="file" id="openFileBtn" accept="audio/*,video/*" multiple>
-<select id="trackSelect"></select>
-<div id="currentTrackDisplay">Currently Playing: None</div>
+<div class="app-frame">
+  <h2 style="color:white;">🎵 Audito</h2>
+  <input type="file" id="fileInput" multiple accept="audio/*,video/*">
+  <div id="mediaContainer" style="width:100%;"></div>
+  <canvas id="spectrum"></canvas>
 
-<select id="vizTheme">
-<option value="classic">🎵 Classic</option>
-<option value="neon">💡 Neon</option>
-<option value="fire">🔥 Fire</option>
-<option value="rainbow">🌈 Rainbow</option>
-</select>
+  <div class="controls">
+    <button id="prev">⏮</button>
+    <button id="play">▶️</button>
+    <button id="pause">⏸</button>
+    <button id="stop">⏹</button>
+    <button id="next">⏭</button>
+    <button id="loop">Loop: Off</button>
+  </div>
 
-<select id="eqPreset">
-<option value="flat">🎚 Flat</option>
-<option value="rock">🎸 Rock</option>
-<option value="pop">🎤 Pop</option>
-<option value="jazz">🎷 Jazz</option>
-<option value="classical">🎻 Classical</option>
-<option value="bass">🔊 Bass Boost</option>
-</select>
+  <div class="volume-control">
+    <label style="color:white; margin-right:10px;">Volume</label>
+    <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.3">
+  </div>
 
-<video id="media" width="100%" controls playsinline webkit-playsinline muted></video>
-<canvas id="spectrum"></canvas>
-<input type="range" id="seekBar" class="slider" min="0" max="100" value="0">
-<input type="range" id="volumeBar" class="slider" min="0" max="1" step="0.01">
+  <div class="eq">
+    <input type="range" min="-12" max="12" value="0" step="1" data-band="60">
+    <input type="range" min="-12" max="12" value="0" step="1" data-band="170">
+    <input type="range" min="-12" max="12" value="0" step="1" data-band="350">
+    <input type="range" min="-12" max="12" value="0" step="1" data-band="1000">
+    <input type="range" min="-12" max="12" value="0" step="1" data-band="3500">
+  </div>
 
-<div id="eqControls" style="display:flex;justify-content:space-between;align-items:flex-end;height:150px;margin:10px 0;"></div>
-
-<div id="mobileControlBar">
-<button id="prevBtn">⏮</button>
-<button id="playBtn">▶</button>
-<button id="pauseBtn">⏸</button>
-<button id="stopBtn">⏹</button>
-<button id="nextBtn">⏭</button>
-<button id="muteBtn">🔇</button>
-</div>
-
-<button id="autoNextToggle">Autoplay Next: ON</button>
-
-<footer>© Audito 2025</footer>
+  <div class="playlist" id="playlist"></div>
+  <div class="debug-log" id="debugLog"></div>
+  <p style="color:white; font-size:12px;">© Audito 2025</p>
 </div>
 
 <script>
-// Elements
-const media = document.getElementById('media');
-const playBtn = document.getElementById('playBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-const stopBtn = document.getElementById('stopBtn');
-const prevBtn = document.getElementById('prevBtn');
-const nextBtn = document.getElementById('nextBtn');
-const muteBtn = document.getElementById('muteBtn');
-const volumeBar = document.getElementById('volumeBar');
-const seekBar = document.getElementById('seekBar');
-const openFileBtn = document.getElementById('openFileBtn');
-const trackSelect = document.getElementById('trackSelect');
-const darkToggle = document.getElementById('darkToggle');
-const currentTrackDisplay = document.getElementById('currentTrackDisplay');
-const autoNextToggle = document.getElementById('autoNextToggle');
-const canvas = document.getElementById('spectrum');
-const ctx = canvas.getContext('2d');
-const eqControlsDiv = document.getElementById('eqControls');
-const vizThemeSelect = document.getElementById('vizTheme');
-const eqPresetSelect = document.getElementById('eqPreset');
+let audioContext;
+let sourceNode;
+let gainNode;
+let analyser;
+let filters = [];
+let currentFileIndex = 0;
+let files = [];
+let loopMode = 0;
 
-let playlist = [], currentTrack = 0;
-let audioCtx, analyser, dataArray, bufferLength;
-let eqFilters = [], eqSliders = [];
-const eqFrequencies = [60,170,310,600,1000,3000,6000,12000,14000,16000];
-let smoothData = [], peakData = [];
-let autoplayNext = true;
-const vizThemes = {
-  classic:{gradient:['rgba(255,50,50,1)','rgba(255,200,50,0.8)','rgba(50,50,255,0.5)']},
-  neon:{gradient:['cyan','magenta','lime']},
-  fire:{gradient:['red','orange','yellow']},
-  rainbow:{gradient:['red','orange','yellow','green','blue','violet']}
-};
-let currentTheme = vizThemes.classic;
-const eqPresets = {
-  flat:[0,0,0,0,0,0,0,0,0,0],
-  rock:[5,4,3,0,-2,-1,2,4,5,5],
-  pop:[-1,2,4,5,3,0,-1,-2,-1,0],
-  jazz:[0,2,3,3,1,0,2,3,2,1],
-  classical:[0,0,1,2,3,2,1,0,0,0],
-  bass:[8,6,4,2,0,-2,-2,-2,-2,-2]
-};
+const mediaContainer = document.getElementById('mediaContainer');
+const fileInput = document.getElementById('fileInput');
+const playlist = document.getElementById('playlist');
+const debugLog = document.getElementById('debugLog');
+const loopBtn = document.getElementById('loop');
+const volumeSlider = document.getElementById('volumeSlider');
+let currentMedia;
+let audioContextStarted = false;
 
-// Default volume 30%
-media.volume = 0.3;
-volumeBar.value = 0.3;
+function log(msg){ debugLog.innerHTML += msg+"<br>"; debugLog.scrollTop = debugLog.scrollHeight; }
 
-// Dark mode
-darkToggle.addEventListener('click',()=>{document.body.classList.toggle('light'); darkToggle.textContent=document.body.classList.contains('light')?"🌞 Light Mode":"🌙 Dark Mode";});
-
-// Load files
-openFileBtn.addEventListener('change', e=>{
-  [...e.target.files].forEach(f=>{
-    if(f.type.startsWith('audio/')||f.type.startsWith('video/')){
-      const url = URL.createObjectURL(f);
-      if(!playlist.some(t=>t.name===f.name)){
-        playlist.push({src:url,name:f.name});
-        const option=document.createElement('option'); option.value=playlist.length-1; option.text=f.name; trackSelect.add(option);
-      }
-    }
-  });
-  if(playlist.length>0){currentTrack=0; loadTrack(currentTrack);}
-});
-
-// Track select
-trackSelect.addEventListener('change', e=>{currentTrack=parseInt(e.target.value,10); loadTrack(currentTrack);});
-
-// Audio context & EQ
-function setupAudio(){
-  if(audioCtx) return;
-  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  const source = audioCtx.createMediaElementSource(media);
-  eqFilters = eqFrequencies.map(f=>new BiquadFilterNode(audioCtx,{type:'peaking',frequency:f,Q:1,gain:0}));
-  source.connect(eqFilters[0]);
-  for(let i=0;i<eqFilters.length-1;i++) eqFilters[i].connect(eqFilters[i+1]);
-  analyser = audioCtx.createAnalyser();
-  eqFilters[eqFilters.length-1].connect(analyser);
-  analyser.connect(audioCtx.destination);
-  bufferLength = analyser.frequencyBinCount;
-  dataArray = new Uint8Array(bufferLength);
-  eqSliders.forEach((s,i)=>{s.addEventListener('input',()=>{eqFilters[i].gain.value=parseFloat(s.value);});});
-}
-
-// EQ sliders
-eqFrequencies.forEach((f,i)=>{
-  const container=document.createElement('div'); container.style.cssText='display:flex;flex-direction:column;align-items:center;';
-  const slider=document.createElement('input'); slider.type='range'; slider.min=-30; slider.max=30; slider.step=1; slider.value=0; slider.dataset.band=i; slider.classList.add('eqSlider','vertical');
-  container.appendChild(slider); const label=document.createElement('span'); label.style.fontSize='10px'; label.textContent=f>=1000?f/1000+'kHz':f+'Hz'; container.appendChild(label);
-  eqControlsDiv.appendChild(container); eqSliders.push(slider);
-});
-
-// EQ presets
-eqPresetSelect.addEventListener('change', e=>{
-  const preset = eqPresets[e.target.value]; if(!preset||!eqFilters.length) return;
-  preset.forEach((g,i)=>{eqFilters[i].gain.value=g; eqSliders[i].value=g;});
-});
-
-// Load track
-function loadTrack(i){
-  if(!playlist[i]) return;
-  media.src=playlist[i].src; media.load();
-  currentTrackDisplay.textContent=`Currently Playing: ${playlist[i].name}`;
-  media.play().catch(()=>{});
-}
-
-// Controls
-playBtn.addEventListener('click',()=>{setupAudio(); if(audioCtx.state==='suspended') audioCtx.resume(); media.muted=false; media.play().catch(()=>{});});
-pauseBtn.addEventListener('click',()=>media.pause());
-stopBtn.addEventListener('click',()=>{media.pause(); media.currentTime=0;});
-prevBtn.addEventListener('click',()=>{currentTrack=(currentTrack-1+playlist.length)%playlist.length; loadTrack(currentTrack);});
-nextBtn.addEventListener('click',()=>{currentTrack=(currentTrack+1)%playlist.length; loadTrack(currentTrack);});
-muteBtn.addEventListener('click',()=>{media.muted=!media.muted; muteBtn.textContent=media.muted?"🔊":"🔇";});
-
-// Volume & seek
-volumeBar.addEventListener('input', e=>{media.volume=e.target.value;});
-seekBar.addEventListener('input', e=>{media.currentTime=(e.target.value/100)*media.duration;});
-media.addEventListener('timeupdate', ()=>{seekBar.value=(media.currentTime/media.duration)*100||0;});
-
-// Autoplay toggle
-autoNextToggle.addEventListener('click', ()=>{autoplayNext=!autoplayNext; autoNextToggle.textContent="Autoplay Next: "+(autoplayNext?"ON":"OFF");});
-
-// Auto-next, loop, shuffle
-let loopMode=0, shuffleMode=false;
-const loopBtn = document.createElement('button'); loopBtn.textContent="🔁 Loop"; document.querySelector('.controls').appendChild(loopBtn);
-const shuffleBtn = document.createElement('button'); shuffleBtn.textContent="🔀 Shuffle"; document.querySelector('.controls').appendChild(shuffleBtn);
-loopBtn.addEventListener('click',()=>{loopMode=(loopMode+1)%3; loopBtn.style.background=loopMode?"#888":"var(--button)";});
-shuffleBtn.addEventListener('click',()=>{shuffleMode=!shuffleMode; shuffleBtn.style.background=shuffleMode?"#888":"var(--button)";});
-
-media.addEventListener('ended',()=>{
-  if(loopMode===1){loadTrack(currentTrack);}
-  else if(loopMode===2){currentTrack=Math.floor(Math.random()*playlist.length); loadTrack(currentTrack);}
-  else if(autoplayNext){currentTrack=(currentTrack+1)%playlist.length; loadTrack(currentTrack);}
-});
-
-// Spectrum
-function drawSpectrum(){
-  requestAnimationFrame(drawSpectrum);
-  if(!analyser) return;
-  analyser.getByteFrequencyData(dataArray);
-  if(smoothData.length!==dataArray.length){smoothData=new Array(dataArray.length).fill(0); peakData=new Array(dataArray.length).fill(0);}
-  for(let i=0;i<dataArray.length;i++){smoothData[i]+=(dataArray[i]-smoothData[i])*0.2; if(smoothData[i]>peakData[i]) peakData[i]=smoothData[i]; else{peakData[i]-=0.5;if(peakData[i]<0) peakData[i]=0;}}
-  canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  const barWidth=(canvas.width/smoothData.length)*2; let x=0;
-  for(let i=0;i<smoothData.length;i++){
-    const barHeight=smoothData[i]/2;
-    const grad=ctx.createLinearGradient(0,canvas.height-barHeight,0,canvas.height);
-    currentTheme.gradient.forEach((c,j)=>grad.addColorStop(j/(currentTheme.gradient.length-1),c));
-    ctx.fillStyle=grad;
-    ctx.fillRect(x,canvas.height-barHeight,barWidth,barHeight);
-    x+=barWidth+1;
+function initAudioContext(){
+  if(!audioContext){
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    gainNode = audioContext.createGain();
+    gainNode.gain.value = volumeSlider.value;
+    analyser.fftSize = 256;
+    setupEQ();
   }
 }
-drawSpectrum();
 
-// Visualizer theme change
-vizThemeSelect.addEventListener('change', e=>{currentTheme=vizThemes[e.target.value]||vizThemes.classic;});
+volumeSlider.oninput = ()=>{
+  if(currentMedia) currentMedia.volume = volumeSlider.value;
+  if(gainNode) gainNode.gain.value = volumeSlider.value;
+  log(`Volume set to ${Math.round(volumeSlider.value*100)}%`);
+};
+
+function setupEQ(){
+  const bands = [60,170,350,1000,3500];
+  filters = bands.map(f => { let filter = audioContext.createBiquadFilter(); filter.type='peaking'; filter.frequency.value=f; filter.Q.value=1; filter.gain.value=0; return filter; });
+  for(let i=0;i<filters.length-1;i++){ filters[i].connect(filters[i+1]); }
+  filters[filters.length-1].connect(gainNode);
+  gainNode.connect(analyser);
+  analyser.connect(audioContext.destination);
+  document.querySelectorAll('.eq input').forEach((slider,i)=>{ slider.oninput = e => { filters[i].gain.value=e.target.value; log(`EQ band ${filters[i].frequency.value}Hz set to ${e.target.value}dB`); } });
+}
+
+function createMediaElement(file){
+  if(currentMedia){ currentMedia.pause(); currentMedia.remove(); if(sourceNode) sourceNode.disconnect(); }
+  let url = URL.createObjectURL(file);
+
+  if(file.type.startsWith('video')){
+    currentMedia = document.createElement('video');
+    currentMedia.src = url;
+    currentMedia.controls = true;
+    currentMedia.style.width = '100%';
+    currentMedia.volume = volumeSlider.value;
+    mediaContainer.appendChild(currentMedia);
+    // Do NOT connect video to Web Audio API
+    currentMedia.play().catch(()=>{});
+  } else {
+    currentMedia = document.createElement('audio');
+    currentMedia.src = url;
+    currentMedia.controls = true;
+    currentMedia.style.width = '100%';
+    currentMedia.volume = volumeSlider.value;
+    mediaContainer.appendChild(currentMedia);
+
+    if(!audioContextStarted){
+      audioContextStarted = true;
+      initAudioContext();
+    }
+    sourceNode = audioContext.createMediaElementSource(currentMedia);
+    sourceNode.connect(filters[0]);
+    currentMedia.play().catch(()=>{});
+  }
+
+  currentMedia.onended = handleMediaEnd;
+  log(`Loaded ${file.type.startsWith('video') ? 'video' : 'audio'}: ${file.name}`);
+}
+
+function loadFile(index){ if(index<0 || index>=files.length) return; currentFileIndex = index; createMediaElement(files[index]); }
+
+fileInput.onchange = e => { files = Array.from(e.target.files); playlist.innerHTML = ''; files.forEach((f,i)=>{ let div=document.createElement('div'); div.innerText=f.name; div.onclick=()=>loadFile(i); playlist.appendChild(div); }); if(files.length>0) loadFile(0); };
+
+function play(){ if(currentMedia){ currentMedia.play().catch(()=>{}); log('Playback started'); } }
+function pause(){ if(currentMedia) currentMedia.pause(); log('Paused'); }
+function stop(){ if(currentMedia){ currentMedia.pause(); currentMedia.currentTime=0; } log('Stopped'); }
+function next(){ loadFile((currentFileIndex+1)%files.length); play(); log('Next track'); }
+function prev(){ loadFile((currentFileIndex-1+files.length)%files.length); play(); log('Previous track'); }
+loopBtn.onclick = ()=>{ loopMode=(loopMode+1)%3; loopBtn.innerText=loopMode===0?'Loop: Off':loopMode===1?'Loop: One':'Loop: All'; log(`Loop mode set to ${loopBtn.innerText}`); };
+function handleMediaEnd(){ if(loopMode===1){ play(); } else if(loopMode===2){ next(); } else { stop(); } }
+
+document.getElementById('play').onclick=play;
+document.getElementById('pause').onclick=pause;
+document.getElementById('stop').onclick=stop;
+document.getElementById('prev').onclick=prev;
+document.getElementById('next').onclick=next;
+
+const canvas=document.getElementById('spectrum');
+const ctx=canvas.getContext('2d');
+function drawSpectrum(){ requestAnimationFrame(drawSpectrum); if(!analyser) return; let data=new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(data); ctx.clearRect(0,0,canvas.width,canvas.height); let barWidth=(canvas.width/data.length); for(let i=0;i<data.length;i++){ let value=data[i]; ctx.fillStyle='lime'; ctx.fillRect(i*barWidth,canvas.height-value/2,barWidth,value/2); } }
+drawSpectrum();
 </script>
 </body>
 </html>
