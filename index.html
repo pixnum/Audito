@@ -9,11 +9,11 @@ body { background: #111; display: flex; justify-content: center; align-items: ce
 .app-frame { width: 420px; max-height: 95vh; background: #222; border-radius: 20px; box-shadow: 8px 8px 16px #111, -8px -8px 16px #333; padding: 15px; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
 .controls, .eq, .playlist, .debug-log, .volume-control { width: 100%; margin-top: 10px; }
 .controls button, .eq button { background: #2a2a2a; border: none; padding: 10px; margin: 5px; border-radius: 12px; color: #fff; cursor: pointer; box-shadow: inset 3px 3px 6px #111, inset -3px -3px 6px #333; }
-.eq { display: flex; justify-content: space-around; align-items: flex-end; height: 150px; }
-.eq input[type=range] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 20px; height: 120px; }
+.eq { display: flex; justify-content: space-around; align-items: flex-end; height: 150px; overflow-x: auto; }
+.eq input[type=range] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 20px; height: 120px; margin-right:5px; }
 .volume-control { display: flex; align-items: center; justify-content: center; }
 .volume-control input[type=range] { width: 80%; }
-canvas { width: 100%; height: 100px; background: black; border-radius: 10px; margin-top: 10px; }
+canvas { width: 100%; height: 100px; background: #111; border-radius: 10px; margin-top: 10px; display: block; }
 .playlist { flex: 1; overflow-y: auto; background: #111; border-radius: 10px; padding: 10px; color: white; }
 .playlist div { padding: 5px; cursor: pointer; }
 .playlist div:hover { background: #333; }
@@ -34,6 +34,12 @@ canvas { width: 100%; height: 100px; background: black; border-radius: 10px; mar
     <button id="stop">⏹</button>
     <button id="next">⏭</button>
     <button id="loop">Loop: Off</button>
+    <select id="spectrumPreset">
+      <option value="rainbow">Rainbow</option>
+      <option value="fire">Fire</option>
+      <option value="ocean">Ocean</option>
+      <option value="neon">Neon</option>
+    </select>
   </div>
 
   <div class="volume-control">
@@ -42,11 +48,17 @@ canvas { width: 100%; height: 100px; background: black; border-radius: 10px; mar
   </div>
 
   <div class="eq">
-    <input type="range" min="-12" max="12" value="0" step="1" data-band="60">
-    <input type="range" min="-12" max="12" value="0" step="1" data-band="170">
-    <input type="range" min="-12" max="12" value="0" step="1" data-band="350">
-    <input type="range" min="-12" max="12" value="0" step="1" data-band="1000">
-    <input type="range" min="-12" max="12" value="0" step="1" data-band="3500">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="60">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="170">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="350">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="1000">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="3500">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="6000">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="10000">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="12000">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="15000">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="18000">
+    <input type="range" min="-36" max="36" value="0" step="1" data-band="20000">
   </div>
 
   <div class="playlist" id="playlist"></div>
@@ -60,6 +72,7 @@ let sourceNode;
 let gainNode;
 let analyser;
 let filters = [];
+let masterGain;
 let currentFileIndex = 0;
 let files = [];
 let loopMode = 0;
@@ -70,6 +83,7 @@ const playlist = document.getElementById('playlist');
 const debugLog = document.getElementById('debugLog');
 const loopBtn = document.getElementById('loop');
 const volumeSlider = document.getElementById('volumeSlider');
+const spectrumPreset = document.getElementById('spectrumPreset');
 let currentMedia;
 let audioContextStarted = false;
 
@@ -92,48 +106,74 @@ volumeSlider.oninput = ()=>{
   log(`Volume set to ${Math.round(volumeSlider.value*100)}%`);
 };
 
-function setupEQ(){
-  const bands = [60,170,350,1000,3500];
-  filters = bands.map(f => { let filter = audioContext.createBiquadFilter(); filter.type='peaking'; filter.frequency.value=f; filter.Q.value=1; filter.gain.value=0; return filter; });
-  for(let i=0;i<filters.length-1;i++){ filters[i].connect(filters[i+1]); }
-  filters[filters.length-1].connect(gainNode);
-  gainNode.connect(analyser);
-  analyser.connect(audioContext.destination);
-  document.querySelectorAll('.eq input').forEach((slider,i)=>{ slider.oninput = e => { filters[i].gain.value=e.target.value; log(`EQ band ${filters[i].frequency.value}Hz set to ${e.target.value}dB`); } });
+function setupEQ() {
+    const eqSliders = document.querySelectorAll('.eq input');
+    filters = [];
+
+    eqSliders.forEach((slider) => {
+        let freq = parseFloat(slider.getAttribute('data-band'));
+        let filter = audioContext.createBiquadFilter();
+        filter.type = 'peaking';
+        filter.frequency.value = freq;
+        filter.Q.value = (freq < 100) ? 1.2 : (freq < 1000 ? 1 : 0.5);
+        filter.gain.value = parseFloat(slider.value);
+        filters.push(filter);
+
+        slider.oninput = e => {
+            filter.gain.value = parseFloat(e.target.value);
+            log(`EQ band ${freq}Hz set to ${filter.gain.value}dB`);
+        };
+    });
+
+    for (let i = 0; i < filters.length - 1; i++) {
+        filters[i].connect(filters[i + 1]);
+    }
+
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = 1.0;
+
+    filters[filters.length - 1].connect(masterGain);
+    masterGain.connect(analyser);
+    analyser.connect(audioContext.destination);
 }
 
-function createMediaElement(file){
-  if(currentMedia){ currentMedia.pause(); currentMedia.remove(); if(sourceNode) sourceNode.disconnect(); }
-  let url = URL.createObjectURL(file);
+function createMediaElement(file) {
+    if(currentMedia){ currentMedia.pause(); currentMedia.remove(); if(sourceNode) sourceNode.disconnect(); }
+    let url = URL.createObjectURL(file);
 
-  if(file.type.startsWith('video')){
-    currentMedia = document.createElement('video');
-    currentMedia.src = url;
-    currentMedia.controls = true;
-    currentMedia.style.width = '100%';
-    currentMedia.volume = volumeSlider.value;
-    mediaContainer.appendChild(currentMedia);
-    // Do NOT connect video to Web Audio API
-    currentMedia.play().catch(()=>{});
-  } else {
-    currentMedia = document.createElement('audio');
-    currentMedia.src = url;
-    currentMedia.controls = true;
-    currentMedia.style.width = '100%';
-    currentMedia.volume = volumeSlider.value;
-    mediaContainer.appendChild(currentMedia);
+    if(file.type.startsWith('video')){
+        currentMedia = document.createElement('video');
+        currentMedia.src = url;
+        currentMedia.controls = true;
+        currentMedia.style.width = '100%';
+        currentMedia.volume = volumeSlider.value;
+        mediaContainer.appendChild(currentMedia);
+        currentMedia.play().catch(()=>{});
+    } else {
+        currentMedia = document.createElement('audio');
+        currentMedia.src = url;
+        currentMedia.controls = true;
+        currentMedia.style.width = '100%';
+        currentMedia.volume = volumeSlider.value;
+        mediaContainer.appendChild(currentMedia);
 
-    if(!audioContextStarted){
-      audioContextStarted = true;
-      initAudioContext();
+        if(!audioContextStarted){
+            audioContextStarted = true;
+            initAudioContext();
+        }
+
+        sourceNode = audioContext.createMediaElementSource(currentMedia);
+        if(filters.length>0) {
+            sourceNode.connect(filters[0]);
+        } else {
+            sourceNode.connect(masterGain);
+        }
+
+        currentMedia.play().catch(()=>{});
     }
-    sourceNode = audioContext.createMediaElementSource(currentMedia);
-    sourceNode.connect(filters[0]);
-    currentMedia.play().catch(()=>{});
-  }
 
-  currentMedia.onended = handleMediaEnd;
-  log(`Loaded ${file.type.startsWith('video') ? 'video' : 'audio'}: ${file.name}`);
+    currentMedia.onended = handleMediaEnd;
+    log(`Loaded ${file.type.startsWith('video') ? 'video' : 'audio'}: ${file.name}`);
 }
 
 function loadFile(index){ if(index<0 || index>=files.length) return; currentFileIndex = index; createMediaElement(files[index]); }
@@ -154,9 +194,43 @@ document.getElementById('stop').onclick=stop;
 document.getElementById('prev').onclick=prev;
 document.getElementById('next').onclick=next;
 
-const canvas=document.getElementById('spectrum');
-const ctx=canvas.getContext('2d');
-function drawSpectrum(){ requestAnimationFrame(drawSpectrum); if(!analyser) return; let data=new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(data); ctx.clearRect(0,0,canvas.width,canvas.height); let barWidth=(canvas.width/data.length); for(let i=0;i<data.length;i++){ let value=data[i]; ctx.fillStyle='lime'; ctx.fillRect(i*barWidth,canvas.height-value/2,barWidth,value/2); } }
+// Spectrum Visualizer with Presets
+const canvas = document.getElementById('spectrum');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function getColor(i, preset) {
+    const percent = i/256;
+    switch(preset){
+        case 'rainbow': return `hsl(${percent*360}, 100%, 50%)`;
+        case 'fire': return `rgb(${Math.min(255, percent*500)}, ${Math.min(255, percent*50)}, 0)`;
+        case 'ocean': return `rgb(0, ${Math.min(255, percent*255)}, ${Math.min(255, percent*255)})`;
+        case 'neon': return `rgb(${Math.min(255, 50+percent*205)}, ${Math.min(255, 255)}, 255)`;
+        default: return `rgb(50,200,50)`;
+    }
+}
+
+function drawSpectrum() {
+    requestAnimationFrame(drawSpectrum);
+    if(!analyser) return;
+    let dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    let barWidth = (canvas.width / dataArray.length) * 1.2;
+    let x = 0;
+    for(let i = 0; i < dataArray.length; i++) {
+        let barHeight = dataArray[i]/2;
+        ctx.fillStyle = getColor(i, spectrumPreset.value);
+        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+        x += barWidth + 1;
+    }
+}
 drawSpectrum();
 </script>
 </body>
