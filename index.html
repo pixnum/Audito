@@ -23,11 +23,15 @@ canvas{width:100%;height:150px;border-radius:6px;display:block;margin:10px 0;bac
 .eqSlider.vertical{-webkit-appearance: slider-vertical;writing-mode: bt-lr;width:15px;height:120px;margin:0 2px;background:var(--button);transition:box-shadow 0.1s;}
 .eqSlider.vertical::-webkit-slider-thumb{-webkit-appearance:none;background:var(--button-hover);width:15px;height:10px;border-radius:4px;cursor:pointer;}
 .eqSlider.vertical::-moz-range-thumb{background:var(--button-hover);width:15px;height:10px;border-radius:4px;cursor:pointer;}
+#mobileControlBar{display:flex;justify-content:space-around;align-items:center;margin-top:10px;}
+#mobileControlBar button{flex:1;margin:2px;padding:12px;font-size:16px;}
+#autoNextToggle{margin-top:5px;padding:6px;border-radius:6px;background:var(--button);color:var(--text);cursor:pointer;}
 @media (max-width:600px){
   .player-frame{padding:15px;}
   video{width:100%;height:auto;max-height:250px;}
   .controls button{padding:6px 8px;margin:3px;font-size:12px;}
   .eqSlider.vertical{height:80px;width:12px;}
+  #mobileControlBar button{font-size:14px;padding:10px;}
 }
 </style>
 </head>
@@ -62,16 +66,17 @@ canvas{width:100%;height:150px;border-radius:6px;display:block;margin:10px 0;bac
 
 <div id="eqControls" style="display:flex;justify-content:space-between;align-items:flex-end;height:150px;margin:10px 0;"></div>
 
-<div class="controls">
-<button id="prevBtn">⏮ Prev</button>
-<button id="playBtn">▶ Play</button>
-<button id="pauseBtn">⏸ Pause</button>
-<button id="stopBtn">⏹ Stop</button>
-<button id="nextBtn">⏭ Next</button>
-<button id="muteBtn">🔇 Mute</button>
-<button id="loopBtn">🔁 Loop</button>
-<button id="shuffleBtn">🔀 Shuffle</button>
+<div id="mobileControlBar">
+<button id="prevBtn">⏮</button>
+<button id="playBtn">▶</button>
+<button id="pauseBtn">⏸</button>
+<button id="stopBtn">⏹</button>
+<button id="nextBtn">⏭</button>
+<button id="muteBtn">🔇</button>
 </div>
+
+<button id="autoNextToggle">Autoplay Next: ON</button>
+
 <footer>© Audito 2025</footer>
 </div>
 
@@ -84,25 +89,25 @@ const stopBtn = document.getElementById('stopBtn');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const muteBtn = document.getElementById('muteBtn');
-const loopBtn = document.getElementById('loopBtn');
-const shuffleBtn = document.getElementById('shuffleBtn');
 const volumeBar = document.getElementById('volumeBar');
 const seekBar = document.getElementById('seekBar');
 const openFileBtn = document.getElementById('openFileBtn');
 const trackSelect = document.getElementById('trackSelect');
 const darkToggle = document.getElementById('darkToggle');
 const currentTrackDisplay = document.getElementById('currentTrackDisplay');
+const autoNextToggle = document.getElementById('autoNextToggle');
 const canvas = document.getElementById('spectrum');
 const ctx = canvas.getContext('2d');
 const eqControlsDiv = document.getElementById('eqControls');
 const vizThemeSelect = document.getElementById('vizTheme');
 const eqPresetSelect = document.getElementById('eqPreset');
 
-let playlist = [], currentTrack = 0, loopMode = 0, shuffleMode = false;
-let audioCtx, analyser, dataArray, bufferLength, eqFilters = [];
-let smoothData = [], peakData = [];
+let playlist = [], currentTrack = 0;
+let audioCtx, analyser, dataArray, bufferLength;
+let eqFilters = [], eqSliders = [];
 const eqFrequencies = [60,170,310,600,1000,3000,6000,12000,14000,16000];
-const eqSliders = [];
+let smoothData = [], peakData = [];
+let autoplayNext = true;
 const vizThemes = {
   classic:{gradient:['rgba(255,50,50,1)','rgba(255,200,50,0.8)','rgba(50,50,255,0.5)']},
   neon:{gradient:['cyan','magenta','lime']},
@@ -119,15 +124,15 @@ const eqPresets = {
   bass:[8,6,4,2,0,-2,-2,-2,-2,-2]
 };
 
-// --- Set default volume to 30% ---
+// Default volume 30%
 media.volume = 0.3;
 volumeBar.value = 0.3;
 
-// Dark mode toggle
+// Dark mode
 darkToggle.addEventListener('click',()=>{document.body.classList.toggle('light'); darkToggle.textContent=document.body.classList.contains('light')?"🌞 Light Mode":"🌙 Dark Mode";});
 
 // Load files
-openFileBtn.addEventListener('change', e => {
+openFileBtn.addEventListener('change', e=>{
   [...e.target.files].forEach(f=>{
     if(f.type.startsWith('audio/')||f.type.startsWith('video/')){
       const url = URL.createObjectURL(f);
@@ -143,7 +148,7 @@ openFileBtn.addEventListener('change', e => {
 // Track select
 trackSelect.addEventListener('change', e=>{currentTrack=parseInt(e.target.value,10); loadTrack(currentTrack);});
 
-// Setup audio context
+// Audio context & EQ
 function setupAudio(){
   if(audioCtx) return;
   audioCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -178,40 +183,45 @@ function loadTrack(i){
   if(!playlist[i]) return;
   media.src=playlist[i].src; media.load();
   currentTrackDisplay.textContent=`Currently Playing: ${playlist[i].name}`;
+  media.play().catch(()=>{});
 }
 
-// Play/Pause/Stop controls
-playBtn.addEventListener('click',()=>{
-  setupAudio(); if(audioCtx.state==='suspended') audioCtx.resume();
-  media.muted=false; media.play().catch(err=>console.log(err));
-});
+// Controls
+playBtn.addEventListener('click',()=>{setupAudio(); if(audioCtx.state==='suspended') audioCtx.resume(); media.muted=false; media.play().catch(()=>{});});
 pauseBtn.addEventListener('click',()=>media.pause());
 stopBtn.addEventListener('click',()=>{media.pause(); media.currentTime=0;});
 prevBtn.addEventListener('click',()=>{currentTrack=(currentTrack-1+playlist.length)%playlist.length; loadTrack(currentTrack);});
 nextBtn.addEventListener('click',()=>{currentTrack=(currentTrack+1)%playlist.length; loadTrack(currentTrack);});
-muteBtn.addEventListener('click',()=>{media.muted=!media.muted; muteBtn.textContent=media.muted?"🔊 Unmute":"🔇 Mute";});
-loopBtn.addEventListener('click',()=>{loopMode=(loopMode+1)%3; loopBtn.style.background=loopMode?"#888":"var(--button)";});
-shuffleBtn.addEventListener('click',()=>{shuffleMode=!shuffleMode; shuffleBtn.style.background=shuffleMode?"#888":"var(--button)";});
+muteBtn.addEventListener('click',()=>{media.muted=!media.muted; muteBtn.textContent=media.muted?"🔊":"🔇";});
 
 // Volume & seek
 volumeBar.addEventListener('input', e=>{media.volume=e.target.value;});
 seekBar.addEventListener('input', e=>{media.currentTime=(e.target.value/100)*media.duration;});
 media.addEventListener('timeupdate', ()=>{seekBar.value=(media.currentTime/media.duration)*100||0;});
 
-// Auto-next/loop/shuffle
-media.addEventListener('ended', ()=>{
-  if(loopMode===1) loadTrack(currentTrack);
+// Autoplay toggle
+autoNextToggle.addEventListener('click', ()=>{autoplayNext=!autoplayNext; autoNextToggle.textContent="Autoplay Next: "+(autoplayNext?"ON":"OFF");});
+
+// Auto-next, loop, shuffle
+let loopMode=0, shuffleMode=false;
+const loopBtn = document.createElement('button'); loopBtn.textContent="🔁 Loop"; document.querySelector('.controls').appendChild(loopBtn);
+const shuffleBtn = document.createElement('button'); shuffleBtn.textContent="🔀 Shuffle"; document.querySelector('.controls').appendChild(shuffleBtn);
+loopBtn.addEventListener('click',()=>{loopMode=(loopMode+1)%3; loopBtn.style.background=loopMode?"#888":"var(--button)";});
+shuffleBtn.addEventListener('click',()=>{shuffleMode=!shuffleMode; shuffleBtn.style.background=shuffleMode?"#888":"var(--button)";});
+
+media.addEventListener('ended',()=>{
+  if(loopMode===1){loadTrack(currentTrack);}
   else if(loopMode===2){currentTrack=Math.floor(Math.random()*playlist.length); loadTrack(currentTrack);}
-  else{currentTrack=(currentTrack+1)%playlist.length; loadTrack(currentTrack);}
+  else if(autoplayNext){currentTrack=(currentTrack+1)%playlist.length; loadTrack(currentTrack);}
 });
 
-// Spectrum Analyzer
+// Spectrum
 function drawSpectrum(){
   requestAnimationFrame(drawSpectrum);
   if(!analyser) return;
   analyser.getByteFrequencyData(dataArray);
-  if(smoothData.length!==dataArray.length){smoothData=new Array(dataArray.length).fill(0);peakData=new Array(dataArray.length).fill(0);}
-  for(let i=0;i<dataArray.length;i++){smoothData[i]+=(dataArray[i]-smoothData[i])*0.2;if(smoothData[i]>peakData[i])peakData[i]=smoothData[i];else{peakData[i]-=0.5;if(peakData[i]<0) peakData[i]=0;}}
+  if(smoothData.length!==dataArray.length){smoothData=new Array(dataArray.length).fill(0); peakData=new Array(dataArray.length).fill(0);}
+  for(let i=0;i<dataArray.length;i++){smoothData[i]+=(dataArray[i]-smoothData[i])*0.2; if(smoothData[i]>peakData[i]) peakData[i]=smoothData[i]; else{peakData[i]-=0.5;if(peakData[i]<0) peakData[i]=0;}}
   canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   const barWidth=(canvas.width/smoothData.length)*2; let x=0;
@@ -220,7 +230,8 @@ function drawSpectrum(){
     const grad=ctx.createLinearGradient(0,canvas.height-barHeight,0,canvas.height);
     currentTheme.gradient.forEach((c,j)=>grad.addColorStop(j/(currentTheme.gradient.length-1),c));
     ctx.fillStyle=grad;
-    ctx.fillRect(x,canvas.height-barHeight,barWidth,barHeight); x+=barWidth+1;
+    ctx.fillRect(x,canvas.height-barHeight,barWidth,barHeight);
+    x+=barWidth+1;
   }
 }
 drawSpectrum();
