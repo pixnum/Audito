@@ -100,6 +100,7 @@ eqContainer=document.getElementById('eq');
 
 let files=[], currentIndex=-1, currentMedia=null, isShuffled=false, loopMode=0;
 let audioContext=null, analyser=null, masterGain=null, filters=[], audioBufferSource=null;
+let startTime=0, pausedAt=0;
 const EQ_BANDS=[60,170,350,1000,3500,6000,10000,12000,15000,18000,20000];
 
 function log(msg){ const t=new Date().toLocaleTimeString(); debugLog.innerHTML+=`<div>[${t}] ${msg}</div>`; debugLog.scrollTop=debugLog.scrollHeight; }
@@ -137,6 +138,7 @@ function ensureAudioContext(){
 function loadAndPlay(index){
   if(index<0 || index>=files.length) return; currentIndex=index; const file=files[index];
   mediaContainer.innerHTML=''; if(audioBufferSource){ try{ audioBufferSource.stop(); }catch(e){} audioBufferSource.disconnect(); audioBufferSource=null;}
+  pausedAt=0; startTime=0;
   if(file.type.startsWith('video')){
     currentMedia=document.createElement('video'); currentMedia.src=URL.createObjectURL(file); currentMedia.controls=true; currentMedia.volume=volumeSlider.value; currentMedia.style.width='100%'; mediaContainer.appendChild(currentMedia); currentMedia.play().catch(()=>{}); log(`Video: ${file.name}`);
   } else {
@@ -144,10 +146,12 @@ function loadAndPlay(index){
     const reader=new FileReader();
     reader.onload=e=>{
       audioContext.decodeAudioData(e.target.result).then(buffer=>{
-        if(audioBufferSource){ try{ audioBufferSource.stop(); }catch(e){} audioBufferSource.disconnect(); }
-        audioBufferSource=audioContext.createBufferSource(); audioBufferSource.buffer=buffer;
+        audioBufferSource=audioContext.createBufferSource();
+        audioBufferSource.buffer=buffer;
         if(filters.length) audioBufferSource.connect(filters[0]); else audioBufferSource.connect(masterGain);
-        audioBufferSource.start(); audioBufferSource.onended=handleEnded;
+        audioBufferSource.start(0, pausedAt);
+        startTime=audioContext.currentTime - pausedAt;
+        audioBufferSource.onended=handleEnded;
         log(`Audio: ${file.name}`);
       });
     };
@@ -164,9 +168,23 @@ fileInput.addEventListener('change',e=>{
   if(files.length) loadAndPlay(0);
 });
 
-playBtn.addEventListener('click',()=>{ if(currentMedia&&currentMedia.play) currentMedia.play(); else if(audioBufferSource) loadAndPlay(currentIndex); });
-pauseBtn.addEventListener('click',()=>{ if(currentMedia&&currentMedia.pause) currentMedia.pause(); });
-stopBtn.addEventListener('click',()=>{ if(currentMedia&&currentMedia.pause) currentMedia.pause(); });
+playBtn.addEventListener('click',()=>{
+  if(currentMedia && currentMedia.play) currentMedia.play();
+  else if(audioBufferSource || pausedAt){
+    loadAndPlay(currentIndex);
+  }
+});
+pauseBtn.addEventListener('click',()=>{
+  if(currentMedia && currentMedia.pause) currentMedia.pause();
+  else if(audioBufferSource){
+    audioBufferSource.stop();
+    pausedAt=audioContext.currentTime - startTime;
+  }
+});
+stopBtn.addEventListener('click',()=>{
+  if(currentMedia && currentMedia.pause){ currentMedia.pause(); currentMedia.currentTime=0; }
+  else if(audioBufferSource){ audioBufferSource.stop(); pausedAt=0; startTime=0; }
+});
 nextBtn.addEventListener('click',()=>{ let idx=isShuffled?Math.floor(Math.random()*files.length):currentIndex+1; loadAndPlay(idx%files.length); });
 prevBtn.addEventListener('click',()=>{ let idx=isShuffled?Math.floor(Math.random()*files.length):currentIndex-1; loadAndPlay((idx+files.length)%files.length); });
 shuffleBtn.addEventListener('click',()=>{ isShuffled=!isShuffled; log('Shuffle '+(isShuffled?'ON':'OFF')); });
